@@ -12,45 +12,104 @@
 <button onclick="saveRight()">Simpan Samping Kanan</button>
 <button onclick="saveBottom()">Simpan Bawah</button>
 
-<script>
-const ESP32_IP = "http://192.168.1.6"; // ← IP ESP32 KAMU
+<div id="views"></div>
 
+<script>
+const ESP32_IP = "http://192.168.1.6";
+
+let savedRight = null;
+let savedBottom = null;
+
+// ====== SCENE ======
 let scene = new THREE.Scene();
-let camera = new THREE.PerspectiveCamera(75, 400 / 300, 0.1, 1000);
+let camera = new THREE.PerspectiveCamera(75, 600 / 300, 0.1, 1000);
 let renderer = new THREE.WebGLRenderer();
-renderer.setSize(400, 300);
+renderer.setSize(600, 300);
 document.body.appendChild(renderer.domElement);
 
-let geometry = new THREE.BoxGeometry(3, 0.5, 3);
-let material = new THREE.MeshNormalMaterial();
-let cube = new THREE.Mesh(geometry, material);
-scene.add(cube);
+// LIVE cube
+let liveCube = createCube(0x00ff00);
+scene.add(liveCube);
 
-camera.position.z = 5;
+// Saved cubes
+let rightCube = null;
+let bottomCube = null;
+let combinedCube = null;
 
+camera.position.z = 7;
+
+function createCube() {
+  let geometry = new THREE.BoxGeometry(2, 0.3, 2);
+  let material = new THREE.MeshNormalMaterial();
+  return new THREE.Mesh(geometry, material);
+}
+
+// ====== ANIMATE ======
 function animate() {
-  fetch(`${ESP32_IP}/data`, { mode: "cors" })
+  fetch(`${ESP32_IP}/data`)
     .then(res => res.json())
     .then(data => {
-      cube.rotation.x = data.pitch * Math.PI / 180;
-      cube.rotation.z = data.roll * Math.PI / 180;
+      liveCube.rotation.x = data.pitch * Math.PI / 180;
+      liveCube.rotation.z = data.roll  * Math.PI / 180;
 
-      let total = Math.sqrt(data.pitch**2 + data.roll**2);
-      document.getElementById("angle").innerText =
-        total.toFixed(2) + "°";
-    })
-    .catch(err => console.log("Fetch error:", err));
+      updateCombined();
+    });
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
 
+// ====== SAVE FUNCTIONS ======
 function saveRight() {
-  fetch(`${ESP32_IP}/save-right`);
+  fetch(`${ESP32_IP}/data`)
+    .then(res => res.json())
+    .then(data => {
+      savedRight = data;
+
+      if (rightCube) scene.remove(rightCube);
+      rightCube = createCube();
+      rightCube.position.x = -3;
+      rightCube.rotation.x = data.pitch * Math.PI / 180;
+      rightCube.rotation.z = data.roll  * Math.PI / 180;
+
+      scene.add(rightCube);
+    });
 }
 
 function saveBottom() {
-  fetch(`${ESP32_IP}/save-bottom`);
+  fetch(`${ESP32_IP}/data`)
+    .then(res => res.json())
+    .then(data => {
+      savedBottom = data;
+
+      if (bottomCube) scene.remove(bottomCube);
+      bottomCube = createCube();
+      bottomCube.position.x = 3;
+      bottomCube.rotation.x = data.pitch * Math.PI / 180;
+      bottomCube.rotation.z = data.roll  * Math.PI / 180;
+
+      scene.add(bottomCube);
+    });
+}
+
+// ====== COMBINE & HITUNG SUDUT ======
+function updateCombined() {
+  if (!savedRight || !savedBottom) return;
+
+  let pitch = (savedRight.pitch + savedBottom.pitch) / 2;
+  let roll  = (savedRight.roll  + savedBottom.roll)  / 2;
+
+  if (combinedCube) scene.remove(combinedCube);
+  combinedCube = createCube();
+  combinedCube.position.y = -2;
+  combinedCube.rotation.x = pitch * Math.PI / 180;
+  combinedCube.rotation.z = roll  * Math.PI / 180;
+
+  scene.add(combinedCube);
+
+  let totalAngle = Math.sqrt(pitch * pitch + roll * roll);
+  document.getElementById("angle").innerText =
+    totalAngle.toFixed(2) + "°";
 }
 
 animate();
@@ -58,4 +117,3 @@ animate();
 
 </body>
 </html>
-
