@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Deteksi Kemiringan Ruangan</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+</head>
+<body>
+
+<h3>Kemiringan Ruangan</h3>
+<p id="angle">0°</p>
+
+<button onclick="saveRight()">Simpan Samping Kanan</button>
+<button onclick="saveBottom()">Simpan Bawah</button>
+
+<script>
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(400, 300);
+document.body.appendChild(renderer.domElement);
+
+let geometry = new THREE.BoxGeometry(3, 0.5, 3);
+let material = new THREE.MeshNormalMaterial();
+let cube = new THREE.Mesh(geometry, material);
+scene.add(cube);
+
+camera.position.z = 5;
+
+function animate() {
+  fetch("/data")
+    .then(res => res.json())
+    .then(data => {
+      cube.rotation.x = data.pitch * Math.PI / 180;
+      cube.rotation.z = data.roll * Math.PI / 180;
+
+      let total = Math.sqrt(data.pitch**2 + data.roll**2);
+      document.getElementById("angle").innerText = total.toFixed(2) + "°";
+    });
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+function saveRight() {
+  fetch("/save-right");
+}
+
+function saveBottom() {
+  fetch("/save-bottom");
+}
+
+animate();
+</script>
+
+</body>
+</html>
