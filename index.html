@@ -3,76 +3,97 @@
 <head>
   <title>Deteksi Kemiringan Ruangan</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <style>
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .box {
+      text-align: center;
+      border: 1px solid #ccc;
+      padding: 5px;
+    }
+  </style>
 </head>
 <body>
 
-<h3>Kemiringan Ruangan</h3>
-<p id="angle">0°</p>
+<h3>Visualisasi Kemiringan Ruangan</h3>
+<p><b>Kemiringan Gabungan:</b> <span id="angle">0°</span></p>
 
 <button onclick="saveRight()">Simpan Samping Kanan</button>
 <button onclick="saveBottom()">Simpan Bawah</button>
 
-<div id="views"></div>
+<div class="grid">
+  <div class="box"><b>LIVE</b><div id="live"></div></div>
+  <div class="box"><b>SAMPING KANAN</b><div id="right"></div></div>
+  <div class="box"><b>BAWAH</b><div id="bottom"></div></div>
+  <div class="box"><b>GABUNGAN</b><div id="combine"></div></div>
+</div>
 
 <script>
 const ESP32_IP = "http://192.168.1.6";
 
+// ====== DATA ======
 let savedRight = null;
 let savedBottom = null;
 
-// ====== SCENE ======
-let scene = new THREE.Scene();
-let camera = new THREE.PerspectiveCamera(75, 600 / 300, 0.1, 1000);
-let renderer = new THREE.WebGLRenderer();
-renderer.setSize(600, 300);
-document.body.appendChild(renderer.domElement);
+// ====== HELPER ======
+function createView(container) {
+  let scene = new THREE.Scene();
+  let camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+  let renderer = new THREE.WebGLRenderer();
+  renderer.setSize(200, 200);
+  document.getElementById(container).appendChild(renderer.domElement);
 
-// LIVE cube
-let liveCube = createCube(0x00ff00);
-scene.add(liveCube);
+  let cube = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.3, 2),
+    new THREE.MeshNormalMaterial()
+  );
+  scene.add(cube);
+  camera.position.z = 5;
 
-// Saved cubes
-let rightCube = null;
-let bottomCube = null;
-let combinedCube = null;
-
-camera.position.z = 7;
-
-function createCube() {
-  let geometry = new THREE.BoxGeometry(2, 0.3, 2);
-  let material = new THREE.MeshNormalMaterial();
-  return new THREE.Mesh(geometry, material);
+  return { scene, camera, renderer, cube };
 }
 
-// ====== ANIMATE ======
+// ====== VIEWS ======
+let liveView   = createView("live");
+let rightView  = createView("right");
+let bottomView = createView("bottom");
+let combView   = createView("combine");
+
+// ====== LIVE UPDATE ======
 function animate() {
   fetch(`${ESP32_IP}/data`)
     .then(res => res.json())
     .then(data => {
-      liveCube.rotation.x = data.pitch * Math.PI / 180;
-      liveCube.rotation.z = data.roll  * Math.PI / 180;
-
-      updateCombined();
+      updateCube(liveView, data.pitch, data.roll);
+      updateCombine();
     });
 
-  renderer.render(scene, camera);
+  renderAll();
   requestAnimationFrame(animate);
 }
 
-// ====== SAVE FUNCTIONS ======
+// ====== UPDATE ======
+function updateCube(view, pitch, roll) {
+  view.cube.rotation.x = pitch * Math.PI / 180;
+  view.cube.rotation.z = roll  * Math.PI / 180;
+}
+
+function renderAll() {
+  [liveView, rightView, bottomView, combView].forEach(v => {
+    v.renderer.render(v.scene, v.camera);
+  });
+}
+
+// ====== SAVE BUTTONS ======
 function saveRight() {
   fetch(`${ESP32_IP}/data`)
     .then(res => res.json())
     .then(data => {
       savedRight = data;
-
-      if (rightCube) scene.remove(rightCube);
-      rightCube = createCube();
-      rightCube.position.x = -3;
-      rightCube.rotation.x = data.pitch * Math.PI / 180;
-      rightCube.rotation.z = data.roll  * Math.PI / 180;
-
-      scene.add(rightCube);
+      updateCube(rightView, data.pitch, data.roll);
     });
 }
 
@@ -81,35 +102,22 @@ function saveBottom() {
     .then(res => res.json())
     .then(data => {
       savedBottom = data;
-
-      if (bottomCube) scene.remove(bottomCube);
-      bottomCube = createCube();
-      bottomCube.position.x = 3;
-      bottomCube.rotation.x = data.pitch * Math.PI / 180;
-      bottomCube.rotation.z = data.roll  * Math.PI / 180;
-
-      scene.add(bottomCube);
+      updateCube(bottomView, data.pitch, data.roll);
     });
 }
 
-// ====== COMBINE & HITUNG SUDUT ======
-function updateCombined() {
+// ====== COMBINE ======
+function updateCombine() {
   if (!savedRight || !savedBottom) return;
 
   let pitch = (savedRight.pitch + savedBottom.pitch) / 2;
   let roll  = (savedRight.roll  + savedBottom.roll)  / 2;
 
-  if (combinedCube) scene.remove(combinedCube);
-  combinedCube = createCube();
-  combinedCube.position.y = -2;
-  combinedCube.rotation.x = pitch * Math.PI / 180;
-  combinedCube.rotation.z = roll  * Math.PI / 180;
+  updateCube(combView, pitch, roll);
 
-  scene.add(combinedCube);
-
-  let totalAngle = Math.sqrt(pitch * pitch + roll * roll);
+  let total = Math.sqrt(pitch*pitch + roll*roll);
   document.getElementById("angle").innerText =
-    totalAngle.toFixed(2) + "°";
+    total.toFixed(2) + "°";
 }
 
 animate();
