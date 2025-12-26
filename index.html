@@ -1,111 +1,185 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Deteksi Kemiringan Sudut Ruangan</title>
+
+  <!-- THREE.JS LOCAL (WAJIB) -->
+  <script src="/three.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 10px;
+    }
+
+    h3 {
+      margin: 5px 0 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .box {
+      background: #1c1c1c;
+      padding: 5px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    canvas {
+      border: 1px solid #333;
+    }
+
+    button {
+      margin: 5px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    #angle {
+      font-size: 20px;
+      font-weight: bold;
+      color: #00ffcc;
+    }
+  </style>
+</head>
+<body>
+
+<h3>Visualisasi 3D Kemiringan Sudut Ruangan</h3>
+
+<div style="margin-bottom:10px;">
+  <button onclick="saveRight()">Simpan Samping Kanan</button>
+  <button onclick="saveBottom()">Simpan Bawah</button>
+  <span style="margin-left:20px;">Sudut Ruangan: <span id="angle">0°</span></span>
+</div>
+
+<div class="grid">
+  <div class="box">
+    <b>Live Sensor</b>
+    <div id="live"></div>
+  </div>
+
+  <div class="box">
+    <b>Samping Kanan (Dinding)</b>
+    <div id="right"></div>
+  </div>
+
+  <div class="box">
+    <b>Bawah (Lantai)</b>
+    <div id="bottom"></div>
+  </div>
+
+  <div class="box">
+    <b>Gabungan Sudut Ruangan</b>
+    <div id="combine"></div>
+  </div>
+</div>
+
 <script>
-const ESP32_IP = "http://192.168.1.6";
+const ESP32_IP = location.origin;
 
-let savedRight = null;
-let savedBottom = null;
+// ====== UTILITY VIEW ======
+function createView(containerId) {
+  const scene = new THREE.Scene();
 
-// ====== CREATE VIEW ======
-function createView(container) {
-  let scene = new THREE.Scene();
-  let camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-  let renderer = new THREE.WebGLRenderer();
-  renderer.setSize(200, 200);
-  document.getElementById(container).appendChild(renderer.domElement);
-
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
   camera.position.set(3, 3, 5);
   camera.lookAt(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(200, 200);
+
+  document.getElementById(containerId).appendChild(renderer.domElement);
 
   return { scene, camera, renderer };
 }
 
 // ====== VIEWS ======
-let liveView   = createView("live");
-let rightView  = createView("right");
-let bottomView = createView("bottom");
-let combView   = createView("combine");
+const liveView   = createView("live");
+const rightView  = createView("right");
+const bottomView = createView("bottom");
+const combView   = createView("combine");
+
+// ====== LIGHT ======
+[ liveView, rightView, bottomView, combView ].forEach(v => {
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(3, 5, 4);
+  v.scene.add(light);
+});
 
 // ====== LIVE OBJECT ======
-let livePlane = new THREE.Mesh(
+const livePlane = new THREE.Mesh(
   new THREE.PlaneGeometry(2, 2),
   new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
 );
 liveView.scene.add(livePlane);
 
-// ====== SAVED OBJECTS ======
-let rightPlane, bottomPlane;
+// ====== SAVED DATA ======
+let savedRight = null;
+let savedBottom = null;
+let rightPlane = null;
+let bottomPlane = null;
 
-// ====== LIVE UPDATE ======
-function animate() {
-  fetch(`${ESP32_IP}/data`)
-    .then(res => res.json())
-    .then(data => {
-      // LIVE (ikuti langsung)
-      livePlane.rotation.x = data.pitch * Math.PI / 180;
-      livePlane.rotation.z = data.roll  * Math.PI / 180;
-    });
-
-  renderAll();
-  requestAnimationFrame(animate);
-}
-
-// ====== SAVE ======
-function saveRight() {
-  fetch(`${ESP32_IP}/data`)
-    .then(res => res.json())
-    .then(data => {
-      savedRight = data;
-
-      if (rightPlane) rightView.scene.remove(rightPlane);
-      rightPlane = createVerticalPlane(data.roll);
-      rightView.scene.add(rightPlane);
-
-      updateCombine();
-    });
-}
-
-function saveBottom() {
-  fetch(`${ESP32_IP}/data`)
-    .then(res => res.json())
-    .then(data => {
-      savedBottom = data;
-
-      if (bottomPlane) bottomView.scene.remove(bottomPlane);
-      bottomPlane = createHorizontalPlane(data.pitch);
-      bottomView.scene.add(bottomPlane);
-
-      updateCombine();
-    });
-}
-
-// ====== PLANE CREATION ======
+// ====== CREATE PLANES ======
 function createVerticalPlane(roll) {
-  let plane = new THREE.Mesh(
+  const plane = new THREE.Mesh(
     new THREE.PlaneGeometry(2, 2),
     new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
   );
-  plane.rotation.y = Math.PI / 2;     // tegak
+  plane.rotation.y = Math.PI / 2;
   plane.rotation.z = roll * Math.PI / 180;
   return plane;
 }
 
 function createHorizontalPlane(pitch) {
-  let plane = new THREE.Mesh(
+  const plane = new THREE.Mesh(
     new THREE.PlaneGeometry(2, 2),
     new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
   );
-  plane.rotation.x = -Math.PI / 2;    // tidur
-  plane.rotation.x += pitch * Math.PI / 180;
+  plane.rotation.x = -Math.PI / 2 + pitch * Math.PI / 180;
   return plane;
 }
 
-// ====== COMBINE ======
+// ====== SAVE BUTTONS ======
+function saveRight() {
+  fetch(ESP32_IP + "/data")
+    .then(r => r.json())
+    .then(d => {
+      savedRight = d;
+      if (rightPlane) rightView.scene.remove(rightPlane);
+      rightPlane = createVerticalPlane(d.roll);
+      rightView.scene.add(rightPlane);
+      updateCombine();
+    });
+}
+
+function saveBottom() {
+  fetch(ESP32_IP + "/data")
+    .then(r => r.json())
+    .then(d => {
+      savedBottom = d;
+      if (bottomPlane) bottomView.scene.remove(bottomPlane);
+      bottomPlane = createHorizontalPlane(d.pitch);
+      bottomView.scene.add(bottomPlane);
+      updateCombine();
+    });
+}
+
+// ====== COMBINE VIEW ======
 function updateCombine() {
   if (!savedRight || !savedBottom) return;
 
   combView.scene.clear();
 
-  let wall = createVerticalPlane(savedRight.roll);
-  let floor = createHorizontalPlane(savedBottom.pitch);
+  const wall = createVerticalPlane(savedRight.roll);
+  const floor = createHorizontalPlane(savedBottom.pitch);
 
   wall.position.x = -1;
   floor.position.y = -1;
@@ -113,25 +187,35 @@ function updateCombine() {
   combView.scene.add(wall);
   combView.scene.add(floor);
 
-  // Hitung kemiringan ruang (vektor normal lantai)
-  let normal = new THREE.Vector3(0, 1, 0)
+  // Hitung kemiringan lantai
+  const normal = new THREE.Vector3(0, 1, 0)
     .applyEuler(floor.rotation);
 
-  let angle = THREE.MathUtils.radToDeg(
+  const angle = THREE.MathUtils.radToDeg(
     Math.acos(normal.dot(new THREE.Vector3(0, 1, 0)))
   );
 
-  document.getElementById("angle").innerText =
-    angle.toFixed(2) + "°";
+  document.getElementById("angle").innerText = angle.toFixed(2) + "°";
 }
 
-// ====== RENDER ======
-function renderAll() {
+// ====== LOOP ======
+function animate() {
+  fetch(ESP32_IP + "/data")
+    .then(r => r.json())
+    .then(d => {
+      livePlane.rotation.x = d.pitch * Math.PI / 180;
+      livePlane.rotation.z = d.roll  * Math.PI / 180;
+    });
+
   [liveView, rightView, bottomView, combView].forEach(v => {
     v.renderer.render(v.scene, v.camera);
   });
+
+  requestAnimationFrame(animate);
 }
 
 animate();
 </script>
 
+</body>
+</html>
