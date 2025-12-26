@@ -13,8 +13,10 @@
 <button onclick="saveBottom()">Simpan Bawah</button>
 
 <script>
+const ESP32_IP = "http://192.168.1.6"; // ← IP ESP32 KAMU
+
 let scene = new THREE.Scene();
-let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+let camera = new THREE.PerspectiveCamera(75, 400 / 300, 0.1, 1000);
 let renderer = new THREE.WebGLRenderer();
 renderer.setSize(400, 300);
 document.body.appendChild(renderer.domElement);
@@ -27,26 +29,28 @@ scene.add(cube);
 camera.position.z = 5;
 
 function animate() {
-  fetch("/data")
+  fetch(`${ESP32_IP}/data`, { mode: "cors" })
     .then(res => res.json())
     .then(data => {
       cube.rotation.x = data.pitch * Math.PI / 180;
       cube.rotation.z = data.roll * Math.PI / 180;
 
       let total = Math.sqrt(data.pitch**2 + data.roll**2);
-      document.getElementById("angle").innerText = total.toFixed(2) + "°";
-    });
+      document.getElementById("angle").innerText =
+        total.toFixed(2) + "°";
+    })
+    .catch(err => console.log("Fetch error:", err));
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
 
 function saveRight() {
-  fetch("/save-right");
+  fetch(`${ESP32_IP}/save-right`);
 }
 
 function saveBottom() {
-  fetch("/save-bottom");
+  fetch(`${ESP32_IP}/save-bottom`);
 }
 
 animate();
@@ -54,3 +58,4 @@ animate();
 
 </body>
 </html>
+
